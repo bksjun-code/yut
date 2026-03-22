@@ -211,50 +211,87 @@ class YutGame {
 
     getBestMove(playerIndex, steps) {
         const player = this.players[playerIndex];
-        const opponentIndex = 1 - playerIndex;
-        const opponent = this.players[opponentIndex];
-
-        // 1. Identify all valid moves
-        const validMoves = player.mals
-            .filter(m => m.status !== 'FINISHED')
-            .map(m => ({
-                malId: m.id,
-                currentPos: m.pos,
-                newPos: (() => {
-                    const p = this.getPath(m.pos, steps);
-                    return p.length > 0 ? p[p.length - 1] : m.pos;
-                })()
-            }))
-            .filter(m => m.currentPos !== -1 || m.newPos !== -1);
-
-        if (validMoves.length === 0) return null;
-
-        // 2. Strategy: Catching prioritized
-        const catchMoves = validMoves.filter(move => {
-            return move.newPos !== -1 && move.newPos !== 100 && 
-                   opponent.mals.some(om => om.pos === move.newPos);
-        });
-        if (catchMoves.length > 0) return catchMoves[0].malId;
-
-        // 3. Strategy: Pregnancy prioritized (if has waiting)
-        const hasWaiting = player.mals.some(m => m.pos === -1);
-        if (hasWaiting) {
-            const pregMoves = validMoves.filter(m => this.specialSpots.pregnancy.includes(m.newPos));
-            if (pregMoves.length > 0) return pregMoves[0].malId;
-        }
-
-        // 4. Strategy: Avoid Pongdang
-        const safeMoves = validMoves.filter(m => !this.specialSpots.pongdang.includes(m.newPos));
+        const validMals = player.mals.filter(m => m.status !== 'FINISHED');
         
-        // 5. Strategy: Move piece already on board furthest
-        const onBoardMoves = (safeMoves.length > 0 ? safeMoves : validMoves).filter(move => move.currentPos !== -1);
-        if (onBoardMoves.length > 0) {
-            onBoardMoves.sort((a, b) => b.currentPos - a.currentPos);
-            return onBoardMoves[0].malId;
+        if (validMals.length === 0) return null;
+
+        let bestScore = -Infinity;
+        let bestMalId = null;
+
+        validMals.forEach(mal => {
+            const path = this.getPath(mal.pos, steps);
+            const newPos = path.length > 0 ? path[path.length - 1] : mal.pos;
+            
+            // Skip if no movement possible (invalid back-do)
+            if (mal.pos === -1 && newPos === -1) return;
+
+            const score = this.evaluateMove(playerIndex, mal.id, newPos, steps);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMalId = mal.id;
+            }
+        });
+
+        return bestMalId;
+    }
+
+    evaluateMove(playerIndex, malId, newPos, steps) {
+        const player = this.players[playerIndex];
+        const opponent = this.players[1 - playerIndex];
+        const mal = player.mals.find(m => m.id === malId);
+        
+        let score = 0;
+
+        // 1. Goal (Finishing)
+        if (newPos === 100) {
+            const carryCount = player.mals.filter(m => m.pos === mal.pos).length;
+            score += 200 * carryCount; // Finishing multiple mals is great
+            return score; 
         }
 
-        // 6. Default: Move a new piece out
-        return (safeMoves.length > 0 ? safeMoves : validMoves)[0].malId;
+        // 2. Pongdang (Danger)
+        if (this.specialSpots.pongdang.includes(newPos)) {
+            return -1000;
+        }
+
+        // 3. Catching Opponent
+        const caughtCount = opponent.mals.filter(m => m.pos === newPos && newPos !== -1).length;
+        if (caughtCount > 0) {
+            score += 150 + (caughtCount * 50);
+        }
+
+        // 4. Pregnancy (Bonus Mal)
+        if (this.specialSpots.pregnancy.includes(newPos)) {
+            const hasWaiting = player.mals.some(m => m.pos === -1);
+            if (hasWaiting) score += 120;
+        }
+
+        // 5. Upgi (Stacking Self) - Joining another piece already on the board
+        const joiningMals = player.mals.filter(m => m.pos === newPos && m.id !== mal.id && newPos !== -1).length;
+        if (joiningMals > 0) {
+            score += 80;
+        }
+
+        // 6. Shortcuts (Corners and Center)
+        if (newPos === 5 || newPos === 10) score += 60;
+        if (newPos === 22) score += 50;
+
+        // 7. Progress and Deployment
+        if (mal.pos === -1) {
+            // Incentive to deploy if we have few pieces out or it's a good roll
+            const malsOnBoard = player.mals.filter(m => m.pos !== -1 && m.pos !== 100).length;
+            score += (4 - malsOnBoard) * 10; 
+        } else {
+            // Incentive to move forward
+            score += (steps > 0 ? steps * 2 : 5); 
+            // Variability: Slightly favor moving the one further ahead
+            score += mal.pos * 0.5;
+        }
+
+        // 8. Random factor (to prevent purely predictable behavior)
+        score += Math.random() * 5;
+
+        return score;
     }
 
 
