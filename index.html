@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전통 윷놀이 - Premium Edition</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700&family=Nanum+Myeongjo:wght@400;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Left Sidebar: Puppy -->
+        <div id="sidebar-left" class="inventory-sidebar">
+            <div class="player-inventory p1">
+                <h4>나 (강아지)</h4>
+                <div class="mal-slots"></div>
+            </div>
+        </div>
+
+        <!-- Center: Game Board -->
+        <div id="board-area">
+            <div class="board-scaler">
+                <div class="board-sizer">
+                    <img id="board-background" src="assets/simple_board.svg" alt="Yut Board">
+                    <div id="pieces-overlay"></div>
+                    <div id="path-markers"></div>
+                </div>
+            </div>
+            <div id="result-bubble">도</div>
+        </div>
+
+        <!-- Right Sidebar: Calf -->
+        <div id="sidebar-right" class="inventory-sidebar">
+            <div class="player-inventory p2">
+                <h4>컴퓨터 (송아지)</h4>
+                <div class="mal-slots"></div>
+            </div>
+        </div>
+
+        <div id="ui-panel">
+            <header>
+                <h1>윷놀이</h1>
+                <p>전통의 멋과 현대적 감각의 만남</p>
+            </header>
+
+            <div id="turn-indicator" class="player-1">
+                <span class="label">현재 차례</span>
+                <span class="player-name">나 (강아지)</span>
+            </div>
+
+            <div id="throw-area">
+                <div id="yut-sticks-container">
+                    <!-- Yut sticks will be rendered here via JS -->
+                </div>
+                <button id="throw-button">윷 던지기</button>
+            </div>
+
+            <div id="results-log">
+                <h3>경기 기록</h3>
+                <ul id="log-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="victory-overlay" class="hidden">
+        <div id="victory-content">
+            <h2 id="winner-text">강아지 승리!</h2>
+            <p>축하합니다! 모든 말이 완주했습니다.</p>
+            <div id="victory-stats"></div>
+            <button id="restart-button">다시 하기</button>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+    <script src="ui.js"></script>
+</body>
+</html>

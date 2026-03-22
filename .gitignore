@@ -1,0 +1,16 @@
+# Project-specific ignores
+.gemini/
+get_img_info.py
+
+# OS-specific ignores
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE-specific ignores
+.vscode/
+.idea/
+
+# Node-specific (if relevant)
+node_modules/
+npm-debug.log

@@ -1,0 +1,300 @@
+/**
+ * Game Engine for Yut Nori
+ */
+
+const YUT_RESULTS = {
+    DO: 1,      // 1 face up
+    GAE: 2,     // 2 faces up
+    GEOL: 3,    // 3 faces up
+    YUT: 4,     // 4 faces up
+    MO: 5,      // 4 faces down (all flat)
+    BACK_DO: -1 // 1 face up with mark
+};
+
+/**
+ * Board Positions (0-28)
+ * 0-19: Outer circle (Anti-clockwise starting from bottom-right)
+ * 20-24: Diagonal from top-right to bottom-left (Shortcut 1)
+ * 25-28: Diagonal from top-left to bottom-right (Shortcut 2, excluding center which is already in S1)
+ * 
+ * Approximate Coordinates for 2752x1536 background (mapped to percent for flexibility)
+ */
+const BOARD_POSITIONS = [
+    // Outer Path (0 to 19)
+    { x: 92, y: 92 }, // 0: Start
+    { x: 92, y: 74 }, { x: 92, y: 56 }, { x: 92, y: 38 }, { x: 92, y: 20 },
+    { x: 92, y: 8 },  // 5: Top-Right Corner
+    { x: 74, y: 8 },  { x: 56, y: 8 },  { x: 38, y: 8 },  { x: 20, y: 8 },
+    { x: 8, y: 8 },   // 10: Top-Left Corner
+    { x: 8, y: 20 },  { x: 8, y: 38 },  { x: 8, y: 56 },  { x: 8, y: 74 },
+    { x: 8, y: 92 },  // 15: Bottom-Left Corner
+    { x: 20, y: 92 }, { x: 38, y: 92 }, { x: 56, y: 92 }, { x: 74, y: 92 },
+    
+    // Diagonal 1 (Top-Right to Bottom-Left)
+    { x: 75, y: 25 }, { x: 62, y: 38 }, 
+    { x: 50, y: 50 }, // 22: Center
+    { x: 38, y: 62 }, { x: 25, y: 75 },
+ 
+    // Diagonal 2 (Top-Left to Bottom-Right)
+    { x: 25, y: 25 }, { x: 38, y: 38 },
+    // Center is 22
+    { x: 62, y: 62 }, { x: 75, y: 75 }
+];
+
+class YutGame {
+    constructor() {
+        this.players = [
+            { id: 1, name: "나 (강아지)", color: "blue", isAI: false, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING' })) },
+            { id: 2, name: "컴퓨터 (송아지)", color: "red", isAI: true, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING' })) }
+        ];
+        this.currentPlayerIndex = 0;
+        this.gameState = 'IDLE'; 
+        this.lastThrow = null;
+        this.pendingMoves = [];
+        this.extraThrows = 0;
+        this.specialSpots = {
+            pongdang: [],
+            pregnancy: []
+        };
+        this.initSpecialSpots();
+    }
+
+    initSpecialSpots() {
+        const availablePositions = Array.from({ length: 28 }, (_, i) => i + 1); // Positions 1-28 (exclude 0/start)
+        const shuffle = (array) => {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        };
+        shuffle(availablePositions);
+        
+        this.specialSpots.pongdang = availablePositions.slice(0, 1);
+        this.specialSpots.pregnancy = availablePositions.slice(1, 2);
+    }
+
+    moveMal(playerIndex, malId, steps) {
+        const player = this.players[playerIndex];
+        const mal = player.mals.find(m => m.id === malId);
+        const oldPos = mal.pos;
+        
+        const path = this.getPath(mal.pos, steps);
+        const newPos = path.length > 0 ? path[path.length - 1] : mal.pos;
+        
+        // Handle grouping
+        const othersAtSameSpot = player.mals.filter(m => m.pos === mal.pos && m.pos !== -1);
+        
+        // Handle catching
+        const opponentIndex = 1 - playerIndex;
+        const opponent = this.players[opponentIndex];
+        const caught = opponent.mals.filter(m => m.pos === newPos && newPos !== -1 && newPos !== 100);
+        
+        let caughtMessage = "";
+        if (caught.length > 0) {
+            caught.forEach(m => {
+                m.pos = -1;
+                m.status = 'WAITING';
+            });
+            caughtMessage = "상대 말을 잡았습니다! 한 번 더 던지세요.";
+        }
+
+        // Update position for self and grouped pieces
+        othersAtSameSpot.forEach(m => {
+            m.pos = newPos;
+            if (newPos === 100) m.status = 'FINISHED';
+            else m.status = 'ON_BOARD';
+        });
+        
+        mal.pos = newPos;
+        if (newPos === 100) mal.status = 'FINISHED';
+        else mal.status = 'ON_BOARD';
+
+        // Check for special spots
+        if (newPos !== -1 && newPos !== 100) {
+            if (this.specialSpots.pongdang.includes(newPos)) {
+                // Pongdang: Back to start!
+                mal.pos = -1;
+                mal.status = 'WAITING';
+                othersAtSameSpot.forEach(m => {
+                    m.pos = -1;
+                    m.status = 'WAITING';
+                });
+                return { newPos: -1, path, caught: caught.length > 0, message: "퐁당! 시작점으로 되돌아갑니다." };
+            } else if (this.specialSpots.pregnancy.includes(newPos)) {
+                // Pregnancy: Gain a piece if waiting!
+                const waitingMal = player.mals.find(m => m.pos === -1);
+                if (waitingMal) {
+                    waitingMal.pos = newPos;
+                    waitingMal.status = 'ON_BOARD';
+                    return { newPos, path, caught: caught.length > 0, message: "임신! 새로운 말을 얻었습니다.", pregnancy: true };
+                }
+            }
+        }
+
+        return { newPos, path, caught: caught.length > 0, message: caughtMessage };
+    }
+
+    getPath(currentPos, steps) {
+        const path = [];
+        if (steps === -1) { // Back-Do
+            if (currentPos === -1) return [];
+            if (currentPos === 0) path.push(19);
+            else if (currentPos === 20) path.push(5);
+            else if (currentPos === 25) path.push(10);
+            else if (currentPos === 27) path.push(22);
+            else if (currentPos === 15) path.push(24);
+            else path.push(currentPos - 1);
+            return path;
+        }
+
+        let pos = currentPos;
+        if (pos === -1) {
+            path.push(0);
+            pos = 0;
+        }
+        
+        for (let i = 0; i < steps; i++) {
+            if (pos === 0 && !(currentPos === -1 && i === 0)) {
+                pos = 100;
+            } else {
+                let cameFrom = currentPos === -1 ? 0 : currentPos;
+                if (path.length >= 2) {
+                    cameFrom = path[path.length - 2];
+                }
+                pos = this.getSingleStep(pos, i === 0, cameFrom);
+            }
+            path.push(pos);
+            if (pos === 100) break;
+        }
+        return path;
+    }
+
+    getSingleStep(pos, isFirstStep, cameFrom) {
+        if (isFirstStep) {
+            if (pos === 5) return 20;
+            if (pos === 10) return 25;
+            if (pos === 22) return 27;
+        }
+
+        if (pos >= 0 && pos < 19) return pos + 1;
+        if (pos === 19) return 0;
+        
+        if (pos === 20) return 21; // Fix: 20 -> 21
+        if (pos === 21) return 22;
+        
+        if (pos === 22) {
+            if (cameFrom === 21) return 23; // Came from Top-Right
+            if (cameFrom === 26) return 27; // Came from Top-Left
+            return 27; // Default exit
+        }
+        
+        if (pos === 23) return 24;
+        if (pos === 24) return 15;
+        if (pos === 25) return 26;
+        if (pos === 26) return 22;
+        if (pos === 27) return 28;
+        if (pos === 28) return 0;
+        if (pos === -1) return 0; // WAITING to Start
+        
+        return pos;
+    }
+
+    hasValidMoves(playerIndex, steps) {
+        const player = this.players[playerIndex];
+        return player.mals.some(m => {
+            if (m.status === 'FINISHED') return false;
+            const path = this.getPath(m.pos, steps);
+            const newPos = path.length > 0 ? path[path.length - 1] : m.pos;
+            return m.pos !== -1 || newPos !== -1;
+        });
+    }
+
+    getBestMove(playerIndex, steps) {
+        const player = this.players[playerIndex];
+        const opponentIndex = 1 - playerIndex;
+        const opponent = this.players[opponentIndex];
+
+        // 1. Identify all valid moves
+        const validMoves = player.mals
+            .filter(m => m.status !== 'FINISHED')
+            .map(m => ({
+                malId: m.id,
+                currentPos: m.pos,
+                newPos: (() => {
+                    const p = this.getPath(m.pos, steps);
+                    return p.length > 0 ? p[p.length - 1] : m.pos;
+                })()
+            }))
+            .filter(m => m.currentPos !== -1 || m.newPos !== -1);
+
+        if (validMoves.length === 0) return null;
+
+        // 2. Strategy: Catching prioritized
+        const catchMoves = validMoves.filter(move => {
+            return move.newPos !== -1 && move.newPos !== 100 && 
+                   opponent.mals.some(om => om.pos === move.newPos);
+        });
+        if (catchMoves.length > 0) return catchMoves[0].malId;
+
+        // 3. Strategy: Pregnancy prioritized (if has waiting)
+        const hasWaiting = player.mals.some(m => m.pos === -1);
+        if (hasWaiting) {
+            const pregMoves = validMoves.filter(m => this.specialSpots.pregnancy.includes(m.newPos));
+            if (pregMoves.length > 0) return pregMoves[0].malId;
+        }
+
+        // 4. Strategy: Avoid Pongdang
+        const safeMoves = validMoves.filter(m => !this.specialSpots.pongdang.includes(m.newPos));
+        
+        // 5. Strategy: Move piece already on board furthest
+        const onBoardMoves = (safeMoves.length > 0 ? safeMoves : validMoves).filter(move => move.currentPos !== -1);
+        if (onBoardMoves.length > 0) {
+            onBoardMoves.sort((a, b) => b.currentPos - a.currentPos);
+            return onBoardMoves[0].malId;
+        }
+
+        // 6. Default: Move a new piece out
+        return (safeMoves.length > 0 ? safeMoves : validMoves)[0].malId;
+    }
+
+
+    throwYut() {
+        // Probability simulation (Standard Yut Nori)
+        // Let 0 = Flat (Back), 1 = Rounded (Front)
+        // Standard Yut: 4 sticks
+        let sticks = Array(4).fill(0).map(() => Math.random() < 0.5 ? 1 : 0);
+        let frontCount = sticks.filter(s => s === 1).length;
+
+        let result;
+        if (frontCount === 1) {
+            // Special case: Back-Do (1 face up with mark). 
+            // Simplified: 1/4 chance of regular Do being Back-Do
+            result = Math.random() < 0.25 ? YUT_RESULTS.BACK_DO : YUT_RESULTS.DO;
+        } else if (frontCount === 2) {
+            result = YUT_RESULTS.GAE;
+        } else if (frontCount === 3) {
+            result = YUT_RESULTS.GEOL;
+        } else if (frontCount === 4) {
+            result = YUT_RESULTS.YUT;
+        } else {
+            result = YUT_RESULTS.MO;
+        }
+
+        return { sticks, result };
+    }
+
+    getResultName(result) {
+        switch(result) {
+            case YUT_RESULTS.DO: return "도";
+            case YUT_RESULTS.GAE: return "개";
+            case YUT_RESULTS.GEOL: return "걸";
+            case YUT_RESULTS.YUT: return "윷";
+            case YUT_RESULTS.MO: return "모";
+            case YUT_RESULTS.BACK_DO: return "뒷도";
+            default: return "";
+        }
+    }
+}
+
+const game = new YutGame();
+console.log("Game Engine Loaded");
