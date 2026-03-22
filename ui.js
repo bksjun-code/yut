@@ -30,11 +30,29 @@ class UIController {
     init() {
         this.throwButton.addEventListener('click', () => this.handleThrow());
         this.restartButton.addEventListener('click', () => location.reload());
+        
+        // Load last winner to decide who starts
+        const lastWinner = localStorage.getItem('yut_last_winner');
+        if (lastWinner !== null) {
+            game.currentPlayerIndex = parseInt(lastWinner);
+        }
+
+        const p = game.players[game.currentPlayerIndex];
+        this.turnIndicator.className = `player-${p.id}`;
+        this.playerName.textContent = p.name;
+
         this.renderYutSticks([1, 1, 1, 1]); 
         this.renderBoard();
         this.renderPieces();
         this.renderInventory();
-        this.addLog("게임을 시작합니다. 당신의 차례입니다.");
+        
+        if (p.isAI) {
+            this.throwButton.disabled = true;
+            this.addLog(`게임을 시작합니다. ${p.name}의 차례입니다.`);
+            setTimeout(() => this.handleThrow(), 1500);
+        } else {
+            this.addLog("게임을 시작합니다. 당신의 차례입니다.");
+        }
     }
 
     renderBoard() {
@@ -368,6 +386,10 @@ class UIController {
         const player = game.players[game.currentPlayerIndex];
         if (player.mals.every(m => m.pos === 100)) {
             const winnerName = player.isAI ? "컴퓨터" : "나 (강아지)";
+            
+            // Save winner for next game
+            localStorage.setItem('yut_last_winner', game.currentPlayerIndex);
+            
             this.showVictoryPopup(winnerName);
             game.gameState = 'FINISHED';
             return true;
