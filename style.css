@@ -19,11 +19,11 @@ body {
     background-color: var(--bg-dark);
     color: var(--text-main);
     font-family: var(--font-serif);
-    overflow: hidden;
-    height: 100vh;
+    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow-x: hidden;
 }
 
 #game-container {
@@ -515,11 +515,14 @@ header p {
 }
 
 @media (max-width: 1024px) {
+    body {
+        overflow-y: auto;
+        height: auto;
+    }
     #game-container {
         flex-direction: column;
         height: auto;
         min-height: 100vh;
-        overflow-y: auto;
         padding: 10px;
         align-items: center;
     }
