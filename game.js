@@ -277,15 +277,30 @@ class YutGame {
         if (newPos === 22) score += 50;
 
         // 7. Progress and Deployment
+        const carryCount = player.mals.filter(m => m.pos === mal.pos).length;
         if (mal.pos === -1) {
             // Incentive to deploy if we have few pieces out or it's a good roll
             const malsOnBoard = player.mals.filter(m => m.pos !== -1 && m.pos !== 100).length;
             score += (4 - malsOnBoard) * 10; 
         } else {
-            // Incentive to move forward
-            score += (steps > 0 ? steps * 2 : 5); 
-            // Variability: Slightly favor moving the one further ahead
-            score += mal.pos * 0.5;
+            if (steps === -1) {
+                // Back-Do logic
+                if (newPos === 0) {
+                    // Reaching the start line via Back-Do is GREAT (next turn finish with any roll)
+                    score += 180 * carryCount; 
+                } else if (newPos === 19 || newPos === 24 || newPos === 28) {
+                    // Moving back into a corner shortcut or finish line
+                    score += 150 * carryCount;
+                } else {
+                    // General backwards move: check the cost
+                    score -= 20 * carryCount; // Penalize moving back, especially for stacks
+                }
+            } else {
+                // Regular forward move
+                score += steps * 5;
+                // Variability: favor moving the one further ahead to finish it
+                score += mal.pos * 1.5;
+            }
         }
 
         // 8. Random factor (to prevent purely predictable behavior)

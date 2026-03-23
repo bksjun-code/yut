@@ -12,6 +12,10 @@ class UIController {
         this.boardOverlay = document.getElementById('path-markers');
         this.piecesOverlay = document.getElementById('pieces-overlay');
         this.resultBubble = document.getElementById('result-bubble');
+        this.actionPool = document.getElementById('action-pool');
+        
+        this.selectedMoveIndex = -1;
+        this.throwSound = new Audio('assets/yut_throw.mp3');
         
         // Victory elements
         this.victoryOverlay = document.getElementById('victory-overlay');
@@ -141,6 +145,14 @@ class UIController {
         this.throwButton.disabled = true;
         
         this.yutContainer.classList.add('throw-active');
+        
+        // Play sound effect (from 0s to 2s)
+        this.throwSound.currentTime = 0;
+        this.throwSound.play().catch(e => console.log("Sound play error:", e));
+        setTimeout(() => {
+            this.throwSound.pause();
+        }, 2000);
+
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         const throwData = game.throwYut();
@@ -169,7 +181,40 @@ class UIController {
         }
         
         game.gameState = 'IDLE';
+        this.selectedMoveIndex = -1; // Reset selection after throw
         this.processNextPendingMove();
+    }
+
+    renderActionPool() {
+        this.actionPool.innerHTML = '';
+        const currentPlayer = game.players[game.currentPlayerIndex];
+        
+        game.pendingMoves.forEach((move, index) => {
+            const pill = document.createElement('div');
+            pill.className = 'action-move-pill';
+            pill.textContent = game.getResultName(move);
+            
+            const isValid = game.hasValidMoves(game.currentPlayerIndex, move);
+            if (!isValid) {
+                pill.classList.add('disabled');
+                pill.title = "이동할 수 있는 말이 없습니다.";
+            }
+            
+            if (this.selectedMoveIndex === index) {
+                pill.classList.add('selected');
+            }
+            
+            if (!currentPlayer.isAI && game.gameState === 'SELECTING_MAL') {
+                pill.addEventListener('click', () => {
+                    this.selectedMoveIndex = index;
+                    this.renderActionPool();
+                });
+            } else if (currentPlayer.isAI || game.gameState !== 'SELECTING_MAL') {
+                pill.classList.add('disabled');
+            }
+            
+            this.actionPool.appendChild(pill);
+        });
     }
 
     processNextPendingMove() {
@@ -189,23 +234,21 @@ class UIController {
 
         game.gameState = 'IDLE';
 
-        // Auto-skip invalid moves (like Back-do with no pieces on board)
-        if (game.pendingMoves.length > 0) {
-            const nextMove = game.pendingMoves[0];
-            if (!game.hasValidMoves(game.currentPlayerIndex, nextMove)) {
-                const moveName = game.getResultName(nextMove);
-                this.addLog(`${moveName}: 이동할 말이 없어 무효 처리됩니다.`);
-                game.pendingMoves.shift();
-                setTimeout(() => this.processNextPendingMove(), 1000);
-                return;
-            }
+        // Auto-select if only one move exists
+        if (game.pendingMoves.length === 1) {
+            this.selectedMoveIndex = 0;
+        } else if (this.selectedMoveIndex >= game.pendingMoves.length) {
+            this.selectedMoveIndex = -1;
         }
+
+        this.renderActionPool();
 
         if (currentPlayer.isAI) {
             if (game.extraThrows > 0) {
                 setTimeout(() => this.handleThrow(), 1000);
             } else if (game.pendingMoves.length > 0) {
                 game.gameState = 'SELECTING_MAL';
+                this.renderActionPool(); // Re-render once state is set
                 setTimeout(() => this.handleAISelection(), 1000);
             }
         } else {
@@ -213,6 +256,7 @@ class UIController {
             this.throwButton.disabled = (game.extraThrows === 0);
             if (game.pendingMoves.length > 0) {
                 game.gameState = 'SELECTING_MAL';
+                this.renderActionPool(); // Re-render once state is set
                 this.addLog("이동할 말을 선택하거나 한 번 더 던지세요.");
             } else {
                 this.addLog("한 번 더 던지세요.");
@@ -227,22 +271,45 @@ class UIController {
             const currentPlayer = game.players[game.currentPlayerIndex];
             if (!currentPlayer.isAI) return;
 
-            const moveAmount = game.pendingMoves.shift();
-            if (moveAmount === undefined) {
+            if (game.pendingMoves.length === 0) {
                 this.processNextPendingMove();
                 return;
             }
+
+            let bestOverAllScore = -Infinity;
+            let bestMoveIndex = -1;
+            let bestMalId = null;
+
+            // Evaluate every possible (Move, Mal) combination
+            game.pendingMoves.forEach((moveAmount, moveIdx) => {
+                const malId = game.getBestMove(game.currentPlayerIndex, moveAmount);
+                if (malId !== null) {
+                    const mal = currentPlayer.mals.find(m => m.id === malId);
+                    const path = game.getPath(mal.pos, moveAmount);
+                    const newPos = path.length > 0 ? path[path.length - 1] : mal.pos;
+                    const score = game.evaluateMove(game.currentPlayerIndex, malId, newPos, moveAmount);
+                    
+                    if (score > bestOverAllScore) {
+                        bestOverAllScore = score;
+                        bestMoveIndex = moveIdx;
+                        bestMalId = malId;
+                    }
+                }
+            });
             
-            const malId = game.getBestMove(game.currentPlayerIndex, moveAmount);
-            
-            if (malId === null) {
+            if (bestMalId === null || bestMoveIndex === -1) {
                 this.addLog("컴퓨터가 이동할 수 있는 말이 없습니다.");
+                game.pendingMoves = []; // Clear invalid moves
                 this.finishMove(false);
                 return;
             }
 
-            const moveResult = game.moveMal(game.currentPlayerIndex, malId, moveAmount);
-            await this.executeMoveResult(game.currentPlayerIndex, malId, moveResult);
+            const moveAmount = game.pendingMoves.splice(bestMoveIndex, 1)[0];
+            this.selectedMoveIndex = -1;
+            this.renderActionPool();
+
+            const moveResult = game.moveMal(game.currentPlayerIndex, bestMalId, moveAmount);
+            await this.executeMoveResult(game.currentPlayerIndex, bestMalId, moveResult);
         } catch (e) {
             console.error("AI Selection Error:", e);
             this.switchTurn();
@@ -286,8 +353,14 @@ class UIController {
         if (game.gameState === 'FINISHED' || game.gameState !== 'SELECTING_MAL' || playerIdx !== game.currentPlayerIndex) return;
 
         try {
-            const moveAmount = game.pendingMoves.shift();
-            if (moveAmount === undefined) return;
+            if (this.selectedMoveIndex === -1) {
+                this.addLog("먼저 이동할 결과를 선택하세요.");
+                return;
+            }
+
+            const moveAmount = game.pendingMoves.splice(this.selectedMoveIndex, 1)[0];
+            this.selectedMoveIndex = -1; // Reset after use
+            this.renderActionPool();
 
             const moveResult = game.moveMal(playerIdx, malId, moveAmount);
             await this.executeMoveResult(playerIdx, malId, moveResult);
