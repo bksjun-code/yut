@@ -506,6 +506,23 @@ class UIController {
             return;
         }
 
+        // Check if any of the pending moves are actually valid (Freeze prevention)
+        if (game.pendingMoves.length > 0) {
+            const hasAnyValidMove = game.pendingMoves.some(move => game.hasValidMoves(game.currentPlayerIndex, move));
+            if (!hasAnyValidMove && game.extraThrows === 0) {
+                this.addLog(`${currentPlayer.name}: 이동할 수 있는 말이 없습니다. 차례가 넘어갑니다.`);
+                game.pendingMoves = [];
+                setTimeout(() => {
+                    this.switchTurn();
+                    game.gameState = 'IDLE';
+                    if (!game.players[game.currentPlayerIndex].isAI) {
+                        this.throwButton.disabled = false;
+                    }
+                }, 1500);
+                return;
+            }
+        }
+
         game.gameState = 'IDLE';
 
         // Auto-select if only one move exists
@@ -559,7 +576,7 @@ class UIController {
                 const malId = game.getBestMove(game.currentPlayerIndex, moveAmount);
                 if (malId !== null) {
                     const mal = currentPlayer.mals.find(m => m.id === malId);
-                    const path = game.getPath(mal.pos, moveAmount);
+                    const path = game.getPath(mal, moveAmount);
                     const newPos = path.length > 0 ? path[path.length - 1] : mal.pos;
                     const score = game.evaluateMove(game.currentPlayerIndex, malId, newPos, moveAmount);
                     
@@ -722,7 +739,7 @@ class UIController {
 
         for (let i = 0; i < path.length; i++) {
             const stepPos = path[i];
-            if (stepPos === 100) continue;
+            if (stepPos === 100 || stepPos === -1) continue;
             
             const coords = this.getCoords(stepPos);
             token.style.left = `${coords.x}%`;
@@ -757,7 +774,7 @@ class UIController {
         // In Back-Do, if piece is at start, it cannot move
         if (mal.pos === -1 && activeMove === -1) return;
 
-        const path = game.getPath(mal.pos, activeMove);
+        const path = game.getPath(mal, activeMove);
         if (!path || path.length === 0) return;
 
         const newPos = path[path.length - 1];

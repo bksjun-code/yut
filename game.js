@@ -44,8 +44,8 @@ const BOARD_POSITIONS = [
 class YutGame {
     constructor() {
         this.players = [
-            { id: 1, name: "나 (강아지)", color: "blue", isAI: false, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING' })) },
-            { id: 2, name: "컴퓨터 (송아지)", color: "red", isAI: true, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING' })) }
+            { id: 1, name: "나 (강아지)", color: "blue", isAI: false, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, hasCircled: false })) },
+            { id: 2, name: "컴퓨터 (송아지)", color: "red", isAI: true, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, hasCircled: false })) }
         ];
         this.currentPlayerIndex = 0;
         this.gameState = 'IDLE'; 
@@ -78,7 +78,7 @@ class YutGame {
         const mal = player.mals.find(m => m.id === malId);
         const oldPos = mal.pos;
         
-        const path = this.getPath(mal.pos, steps);
+        const path = this.getPath(mal, steps);
         const newPos = path.length > 0 ? path[path.length - 1] : mal.pos;
         
         // Handle grouping
@@ -94,20 +94,51 @@ class YutGame {
             caught.forEach(m => {
                 m.pos = -1;
                 m.status = 'WAITING';
+                m.cornerEntered = null;
+                m.hasCircled = false;
             });
             caughtMessage = "상대 말을 잡았습니다! 한 번 더 던지세요.";
         }
+
+        // Helper to update cornerEntered
+        const updateCornerEntered = (m, pos, pathArray) => {
+            if ([20, 21].includes(pos)) m.cornerEntered = 5;
+            else if ([25, 26].includes(pos)) m.cornerEntered = 10;
+            else if (pos === 22) {
+                if (pathArray.includes(21)) m.cornerEntered = 5;
+                else if (pathArray.includes(26)) m.cornerEntered = 10;
+            }
+            else if (![20, 21, 22, 23, 24, 25, 26, 27, 28].includes(pos)) {
+                m.cornerEntered = null;
+            }
+        };
+
+        // Helper to check and update hasCircled
+        const checkHasCircled = (m, oldPosition, pathArray) => {
+            if (oldPosition === 19 || oldPosition === 28 || pathArray.includes(19) || pathArray.includes(28)) {
+                m.hasCircled = true;
+            }
+            if (newPos === -1) {
+                m.hasCircled = false;
+            }
+        };
 
         // Update position for self and grouped pieces
         othersAtSameSpot.forEach(m => {
             m.pos = newPos;
             if (newPos === 100) m.status = 'FINISHED';
+            else if (newPos === -1) m.status = 'WAITING';
             else m.status = 'ON_BOARD';
+            updateCornerEntered(m, newPos, path);
+            checkHasCircled(m, oldPos, path);
         });
         
         mal.pos = newPos;
         if (newPos === 100) mal.status = 'FINISHED';
+        else if (newPos === -1) mal.status = 'WAITING';
         else mal.status = 'ON_BOARD';
+        updateCornerEntered(mal, newPos, path);
+        checkHasCircled(mal, oldPos, path);
 
         // Check for special spots
         if (newPos !== -1 && newPos !== 100) {
@@ -115,9 +146,13 @@ class YutGame {
                 // Pongdang: Back to start!
                 mal.pos = -1;
                 mal.status = 'WAITING';
+                mal.cornerEntered = null;
+                mal.hasCircled = false;
                 othersAtSameSpot.forEach(m => {
                     m.pos = -1;
                     m.status = 'WAITING';
+                    m.cornerEntered = null;
+                    m.hasCircled = false;
                 });
                 return { newPos: -1, path, caught: caught.length > 0, message: "퐁당! 시작점으로 되돌아갑니다." };
             } else if (this.specialSpots.pregnancy.includes(newPos)) {
@@ -126,6 +161,8 @@ class YutGame {
                 if (waitingMal) {
                     waitingMal.pos = newPos;
                     waitingMal.status = 'ON_BOARD';
+                    waitingMal.cornerEntered = mal.cornerEntered;
+                    waitingMal.hasCircled = mal.hasCircled;
                     return { newPos, path, caught: caught.length > 0, message: "임신! 새로운 말을 얻었습니다.", pregnancy: true };
                 }
             }
@@ -134,15 +171,39 @@ class YutGame {
         return { newPos, path, caught: caught.length > 0, message: caughtMessage };
     }
 
-    getPath(currentPos, steps) {
+    getPath(currentPosOrMal, steps, optionalMal = null) {
+        let currentPos;
+        let mal;
+        if (typeof currentPosOrMal === 'object' && currentPosOrMal !== null) {
+            mal = currentPosOrMal;
+            currentPos = mal.pos;
+        } else {
+            currentPos = currentPosOrMal;
+            mal = optionalMal;
+        }
+
         const path = [];
         if (steps === -1) { // Back-Do
             if (currentPos === -1) return [];
-            if (currentPos === 0) path.push(19);
+            if (currentPos === 1) {
+                path.push(0);
+                return path;
+            }
+            if (currentPos === 0) {
+                if (mal && mal.cornerEntered === 10) path.push(28);
+                else path.push(19);
+            }
             else if (currentPos === 20) path.push(5);
             else if (currentPos === 25) path.push(10);
             else if (currentPos === 27) path.push(22);
-            else if (currentPos === 15) path.push(24);
+            else if (currentPos === 15) {
+                if (mal && mal.cornerEntered === 5) path.push(24);
+                else path.push(14);
+            }
+            else if (currentPos === 22) {
+                if (mal && mal.cornerEntered === 10) path.push(26);
+                else path.push(21);
+            }
             else path.push(currentPos - 1);
             return path;
         }
@@ -154,14 +215,14 @@ class YutGame {
         }
         
         for (let i = 0; i < steps; i++) {
-            if (pos === 0 && !(currentPos === -1 && i === 0)) {
+            if (pos === 0 && !(currentPos === -1 && i === 0) && (mal && mal.hasCircled)) {
                 pos = 100;
             } else {
                 let cameFrom = currentPos === -1 ? 0 : currentPos;
                 if (path.length >= 2) {
                     cameFrom = path[path.length - 2];
                 }
-                pos = this.getSingleStep(pos, i === 0, cameFrom);
+                pos = this.getSingleStep(pos, i === 0, cameFrom, mal);
             }
             path.push(pos);
             if (pos === 100) break;
@@ -169,11 +230,11 @@ class YutGame {
         return path;
     }
 
-    getSingleStep(pos, isFirstStep, cameFrom) {
+    getSingleStep(pos, isFirstStep, cameFrom, mal = null) {
         if (isFirstStep) {
             if (pos === 5) return 20;
             if (pos === 10) return 25;
-            if (pos === 22) return 27;
+            if (pos === 22) return 27; // Always go to 27 (optimal path)
         }
 
         if (pos >= 0 && pos < 19) return pos + 1;
@@ -183,8 +244,8 @@ class YutGame {
         if (pos === 21) return 22;
         
         if (pos === 22) {
-            if (cameFrom === 21) return 23; // Came from Top-Right
-            if (cameFrom === 26) return 27; // Came from Top-Left
+            if (cameFrom === 21) return 23; // Came from Top-Right, go straight to 23
+            if (cameFrom === 26) return 27; // Came from Top-Left, go straight to 27
             return 27; // Default exit
         }
         
@@ -203,7 +264,7 @@ class YutGame {
         const player = this.players[playerIndex];
         return player.mals.some(m => {
             if (m.status === 'FINISHED') return false;
-            const path = this.getPath(m.pos, steps);
+            const path = this.getPath(m, steps);
             const newPos = path.length > 0 ? path[path.length - 1] : m.pos;
             return m.pos !== -1 || newPos !== -1;
         });
@@ -219,7 +280,7 @@ class YutGame {
         let bestMalId = null;
 
         validMals.forEach(mal => {
-            const path = this.getPath(mal.pos, steps);
+            const path = this.getPath(mal, steps);
             const newPos = path.length > 0 ? path[path.length - 1] : mal.pos;
             
             // Skip if no movement possible (invalid back-do)
