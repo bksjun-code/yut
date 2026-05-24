@@ -1,6 +1,257 @@
 /**
- * UI Controller for Yut Nori
+ * YutAudioSynthesizer - Web Audio API based traditional sound synthesizer
  */
+class YutAudioSynthesizer {
+    constructor() {
+        this.ctx = null;
+    }
+
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    playMove() {
+        this.init();
+        const now = this.ctx.currentTime;
+        this.createWoodClick(now);
+        this.createWoodClick(now + 0.08);
+    }
+
+    createWoodClick(time) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(750, time);
+        osc.frequency.exponentialRampToValueAtTime(120, time + 0.05);
+        
+        gain.gain.setValueAtTime(0.2, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+        
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(time);
+        osc.stop(time + 0.06);
+    }
+
+    playStack() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const freqs = [392, 523.25, 659.25, 784]; // G4, C5, E5, G5 (traditional major chord)
+        freqs.forEach((freq, idx) => {
+            const time = now + idx * 0.04;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, time);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.9, time + 0.3);
+            
+            gain.gain.setValueAtTime(0.15, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.35);
+        });
+    }
+
+    playCatch() {
+        this.init();
+        const now = this.ctx.currentTime;
+        
+        // 1. Sharp wood clap noise
+        const bufferSize = this.ctx.sampleRate * 0.15;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        
+        const noiseNode = this.ctx.createBufferSource();
+        noiseNode.buffer = buffer;
+        
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 1000;
+        filter.Q.value = 2.0;
+        
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.4, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        
+        noiseNode.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+        noiseNode.start(now);
+        noiseNode.stop(now + 0.15);
+        
+        // 2. Heavy traditional sub-bass drum beat
+        const drumOsc = this.ctx.createOscillator();
+        const drumGain = this.ctx.createGain();
+        drumOsc.frequency.setValueAtTime(140, now);
+        drumOsc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+        
+        drumGain.gain.setValueAtTime(0.5, now);
+        drumGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        
+        drumOsc.connect(drumGain);
+        drumGain.connect(this.ctx.destination);
+        drumOsc.start(now);
+        drumOsc.stop(now + 0.3);
+        
+        // 3. Bright success chord
+        const freqs = [523.25, 659.25, 784, 1046.5];
+        freqs.forEach((freq, idx) => {
+            const time = now + 0.05 + idx * 0.02;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+            
+            gain.gain.setValueAtTime(0.12, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.28);
+        });
+    }
+
+    playPongdang() {
+        this.init();
+        const now = this.ctx.currentTime;
+        
+        // Descending pitch whistle
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(550, now);
+        osc.frequency.linearRampToValueAtTime(120, now + 0.35);
+        
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.05, now + 0.35);
+        
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.38);
+        
+        // Water splash noise
+        setTimeout(() => {
+            if (!this.ctx) return;
+            const splashNow = this.ctx.currentTime;
+            const bufferSize = this.ctx.sampleRate * 0.3;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+            
+            const bandpass = this.ctx.createBiquadFilter();
+            bandpass.type = 'bandpass';
+            bandpass.frequency.setValueAtTime(280, splashNow);
+            bandpass.frequency.exponentialRampToValueAtTime(1100, splashNow + 0.25);
+            
+            const splashGain = this.ctx.createGain();
+            splashGain.gain.setValueAtTime(0.25, splashNow);
+            splashGain.gain.exponentialRampToValueAtTime(0.001, splashNow + 0.28);
+            
+            noise.connect(bandpass);
+            bandpass.connect(splashGain);
+            splashGain.connect(this.ctx.destination);
+            noise.start(splashNow);
+            noise.stop(splashNow + 0.3);
+        }, 350);
+    }
+
+    playPregnancy() {
+        this.init();
+        const now = this.ctx.currentTime;
+        
+        const scale = [523.25, 587.33, 659.25, 698.46, 784, 880, 987.77, 1046.5];
+        scale.forEach((freq, idx) => {
+            const time = now + idx * 0.05;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+            
+            gain.gain.setValueAtTime(0.08, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.18);
+        });
+    }
+
+    playVictory() {
+        this.init();
+        const now = this.ctx.currentTime;
+        
+        // 1. Traditional gong shimmering sound
+        for (let i = 0; i < 3; i++) {
+            const time = now + i * 0.6;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(240 + i * 20, time);
+            osc.frequency.linearRampToValueAtTime(80, time + 0.8);
+            
+            gain.gain.setValueAtTime(0.18, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.8);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.85);
+        }
+        
+        // 2. Trumpet/Flute celebratory melody
+        const melody = [
+            { f: 523.25, d: 0.2 },
+            { f: 587.33, d: 0.2 },
+            { f: 659.25, d: 0.2 },
+            { f: 784.00, d: 0.4 },
+            { f: 659.25, d: 0.2 },
+            { f: 784.00, d: 0.2 },
+            { f: 880.00, d: 0.2 },
+            { f: 1046.50, d: 0.8 }
+        ];
+        
+        let melodyTime = now;
+        melody.forEach((note) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(note.f, melodyTime);
+            
+            gain.gain.setValueAtTime(0.12, melodyTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, melodyTime + note.d - 0.02);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(melodyTime);
+            osc.stop(melodyTime + note.d);
+            
+            melodyTime += note.d;
+        });
+    }
+}
 
 class UIController {
     constructor() {
@@ -16,6 +267,7 @@ class UIController {
         
         this.selectedMoveIndex = -1;
         this.throwSound = new Audio('assets/yut_throw.mp3');
+        this.synth = new YutAudioSynthesizer();
         
         // Victory elements
         this.victoryOverlay = document.getElementById('victory-overlay');
@@ -59,11 +311,27 @@ class UIController {
         }
     }
 
+    getCoordsList() {
+        return BOARD_POSITIONS;
+    }
+
+    getCoords(pos) {
+        if (pos === 100) return { x: 50, y: 50 };
+        return BOARD_POSITIONS[pos] || { x: 50, y: 50 };
+    }
+
     renderBoard() {
         this.boardOverlay.innerHTML = '';
-        BOARD_POSITIONS.forEach((pos, index) => {
+        const coordsList = this.getCoordsList();
+        coordsList.forEach((pos, index) => {
             const slot = document.createElement('div');
             slot.className = 'board-slot';
+            
+            const isLarge = [0, 5, 10, 15, 22].includes(index);
+            if (isLarge) {
+                slot.classList.add('large');
+            }
+            
             if (game.specialSpots.pongdang.includes(index)) {
                 slot.classList.add('pongdang');
                 slot.title = "퐁당! (시작점으로 되돌아감)";
@@ -98,7 +366,7 @@ class UIController {
                 
                 const token = document.createElement('div');
                 token.className = `mal-token p${player.id}`;
-                const coords = BOARD_POSITIONS[mal.pos];
+                const coords = this.getCoords(mal.pos);
                 token.style.left = `${coords.x}%`;
                 token.style.top = `${coords.y}%`;
                 
@@ -111,6 +379,9 @@ class UIController {
                 
                 if (!player.isAI) {
                     token.addEventListener('click', () => this.handleMalClick(pIdx, mal.id));
+                    // Mouse hover highlights for path preview
+                    token.addEventListener('mouseenter', () => this.highlightPath(pIdx, mal.id));
+                    token.addEventListener('mouseleave', () => this.clearPathHighlight());
                 }
                 this.piecesOverlay.appendChild(token);
             }
@@ -129,6 +400,9 @@ class UIController {
                     token.className = `mal-token p${idx + 1} static`;
                     if (!game.players[idx].isAI) {
                         token.addEventListener('click', () => this.handleMalClick(idx, mal.id));
+                        // Mouse hover highlights for path preview
+                        token.addEventListener('mouseenter', () => this.highlightPath(idx, mal.id));
+                        token.addEventListener('mouseleave', () => this.clearPathHighlight());
                     }
                     slot.appendChild(token);
                 }
@@ -352,6 +626,9 @@ class UIController {
     async handleMalClick(playerIdx, malId) {
         if (game.gameState === 'FINISHED' || game.gameState !== 'SELECTING_MAL' || playerIdx !== game.currentPlayerIndex) return;
 
+        // Clear hover highlights immediately on click
+        this.clearPathHighlight();
+
         try {
             if (this.selectedMoveIndex === -1) {
                 this.addLog("먼저 이동할 결과를 선택하세요.");
@@ -381,8 +658,48 @@ class UIController {
         
         await this.animateMove(playerIdx, malId, moveResult.path, movedMals.length);
         
+        // Play special graphic effects before rendering final pieces
+        if (moveResult.newPos === -1 && moveResult.message && moveResult.message.includes("퐁당")) {
+            // Create a temporary spinning/fading token at the trap slot
+            const trapSlotIdx = moveResult.path[moveResult.path.length - 1];
+            if (trapSlotIdx !== undefined && this.getCoords(trapSlotIdx)) {
+                const coords = this.getCoords(trapSlotIdx);
+                const tempToken = document.createElement('div');
+                tempToken.className = `mal-token p${game.players[playerIdx].id} pongdang-active`;
+                tempToken.style.left = `${coords.x}%`;
+                tempToken.style.top = `${coords.y}%`;
+                this.piecesOverlay.appendChild(tempToken);
+                this.synth.playPongdang();
+                
+                await new Promise(resolve => setTimeout(resolve, 1200));
+                tempToken.remove();
+            }
+        } else if (moveResult.pregnancy) {
+            // Create a temporary glowing starburst token at the pregnancy slot
+            if (moveResult.newPos !== -1 && this.getCoords(moveResult.newPos)) {
+                const coords = this.getCoords(moveResult.newPos);
+                const tempToken = document.createElement('div');
+                tempToken.className = `mal-token p${game.players[playerIdx].id} pregnancy-active`;
+                tempToken.style.left = `${coords.x}%`;
+                tempToken.style.top = `${coords.y}%`;
+                this.piecesOverlay.appendChild(tempToken);
+                this.synth.playPregnancy();
+                
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                tempToken.remove();
+            }
+        } else if (moveResult.caught) {
+            this.synth.playCatch();
+        } else if (moveResult.newPos !== 100) {
+            // Check if we joined another of our pieces already sitting at the target spot
+            const joinedSelf = game.players[playerIdx].mals.some(m => m.pos === moveResult.newPos && m.id !== malId && m.status === 'ON_BOARD');
+            if (joinedSelf) {
+                this.synth.playStack();
+            }
+        }
+
         this.renderPieces();
-        this.renderInventory(); // Update inventory after move (especially for Pregnancy)
+        this.renderInventory(); // Update inventory after move
         this.finishMove(moveResult.caught, moveResult.message, moveResult.newPos === 100 ? movedMals.length : 0);
     }
 
@@ -407,14 +724,93 @@ class UIController {
             const stepPos = path[i];
             if (stepPos === 100) continue;
             
-            const coords = BOARD_POSITIONS[stepPos];
+            const coords = this.getCoords(stepPos);
             token.style.left = `${coords.x}%`;
             token.style.top = `${coords.y}%`;
+            
+            // Play wood hop click
+            this.synth.playMove();
             
             await new Promise(resolve => setTimeout(resolve, 300));
         }
 
         token.remove();
+    }
+
+    highlightPath(playerIdx, malId) {
+        if (game.gameState !== 'SELECTING_MAL' || playerIdx !== game.currentPlayerIndex) return;
+        
+        // Find which move is selected or automatically active
+        let activeMove = null;
+        if (this.selectedMoveIndex !== -1) {
+            activeMove = game.pendingMoves[this.selectedMoveIndex];
+        } else if (game.pendingMoves.length === 1) {
+            activeMove = game.pendingMoves[0];
+        }
+        
+        if (activeMove === null) return;
+
+        const player = game.players[playerIdx];
+        const mal = player.mals.find(m => m.id === malId);
+        if (!mal || mal.status === 'FINISHED') return;
+
+        // In Back-Do, if piece is at start, it cannot move
+        if (mal.pos === -1 && activeMove === -1) return;
+
+        const path = game.getPath(mal.pos, activeMove);
+        if (!path || path.length === 0) return;
+
+        const newPos = path[path.length - 1];
+
+        // Draw flowing path highlights
+        path.forEach((slotIdx, i) => {
+            if (slotIdx === -1 || slotIdx === 100) return;
+            const slotEl = this.boardOverlay.querySelector(`[data-index="${slotIdx}"]`);
+            if (slotEl) {
+                slotEl.style.transitionDelay = `${i * 40}ms`;
+                slotEl.classList.add('path-highlight');
+            }
+        });
+
+        // Pulse glow target destination
+        if (newPos !== -1 && newPos !== 100) {
+            const targetEl = this.boardOverlay.querySelector(`[data-index="${newPos}"]`);
+            if (targetEl) {
+                targetEl.classList.add('target-highlight');
+                
+                const opponentIdx = 1 - playerIdx;
+                const hasOpponent = game.players[opponentIdx].mals.some(m => m.pos === newPos && m.pos !== -1);
+                const hasSelf = player.mals.some(m => m.pos === newPos && m.id !== malId && m.pos !== -1);
+                
+                if (hasOpponent) {
+                    targetEl.classList.add('target-catch');
+                } else if (hasSelf) {
+                    targetEl.classList.add('target-stack');
+                } else if (game.specialSpots.pongdang.includes(newPos)) {
+                    targetEl.classList.add('target-pongdang');
+                } else if (game.specialSpots.pregnancy.includes(newPos)) {
+                    targetEl.classList.add('target-pregnancy');
+                } else {
+                    targetEl.classList.add('target-default');
+                }
+            }
+        }
+    }
+
+    clearPathHighlight() {
+        const slots = this.boardOverlay.querySelectorAll('.board-slot');
+        slots.forEach(slot => {
+            slot.style.transitionDelay = '0s';
+            slot.classList.remove(
+                'path-highlight', 
+                'target-highlight', 
+                'target-catch', 
+                'target-stack', 
+                'target-pongdang', 
+                'target-pregnancy', 
+                'target-default'
+            );
+        });
     }
 
     showResultBubble(text) {
@@ -428,9 +824,12 @@ class UIController {
 
     renderYutSticks(sticks) {
         this.yutContainer.innerHTML = '';
-        sticks.forEach((isFront) => {
+        sticks.forEach((isFront, index) => {
             const stick = document.createElement('div');
             stick.className = `yut-stick ${isFront ? 'front' : 'back'}`;
+            if (index === 0) {
+                stick.classList.add('back-do-stick');
+            }
             this.yutContainer.appendChild(stick);
         });
     }
@@ -474,6 +873,7 @@ class UIController {
         this.winnerText.textContent = `${winner} 승리!`;
         this.victoryOverlay.classList.remove('hidden');
         this.addLog(`${winner} 승리!!! 🎉`);
+        this.synth.playVictory();
     }
 }
 

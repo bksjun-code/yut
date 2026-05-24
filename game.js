@@ -235,6 +235,20 @@ class YutGame {
         return bestMalId;
     }
 
+    getDistanceToGoal(pos) {
+        if (pos === -1) return 21;
+        if (pos === 100) return 0;
+        const distMap = {
+            0: 1,  1: 16, 2: 15, 3: 14, 4: 13, 5: 12,
+            6: 11, 7: 10, 8: 9,  9: 8,  10: 7,
+            11: 10, 12: 9, 13: 8, 14: 7,  15: 6,
+            16: 5,  17: 4, 18: 3, 19: 2,
+            20: 11, 21: 10, 22: 4, 23: 8,  24: 7,
+            25: 6,  26: 5,  27: 3, 28: 2
+        };
+        return distMap[pos] !== undefined ? distMap[pos] : 21;
+    }
+
     evaluateMove(playerIndex, malId, newPos, steps) {
         const player = this.players[playerIndex];
         const opponent = this.players[1 - playerIndex];
@@ -298,8 +312,9 @@ class YutGame {
             } else {
                 // Regular forward move
                 score += steps * 5;
-                // Variability: favor moving the one further ahead to finish it
-                score += mal.pos * 1.5;
+                // Favor moving the one further ahead to finish it, based on distance to goal
+                const currentDist = this.getDistanceToGoal(mal.pos);
+                score += (18 - currentDist) * 1.5;
             }
         }
 
@@ -313,15 +328,17 @@ class YutGame {
     throwYut() {
         // Probability simulation (Standard Yut Nori)
         // Let 0 = Flat (Back), 1 = Rounded (Front)
-        // Standard Yut: 4 sticks
+        // Stick 0 is designated as the Back-Do stick.
         let sticks = Array(4).fill(0).map(() => Math.random() < 0.5 ? 1 : 0);
         let frontCount = sticks.filter(s => s === 1).length;
 
         let result;
         if (frontCount === 1) {
-            // Special case: Back-Do (1 face up with mark). 
-            // Simplified: 1/4 chance of regular Do being Back-Do
-            result = Math.random() < 0.25 ? YUT_RESULTS.BACK_DO : YUT_RESULTS.DO;
+            if (sticks[0] === 1) {
+                result = YUT_RESULTS.BACK_DO;
+            } else {
+                result = YUT_RESULTS.DO;
+            }
         } else if (frontCount === 2) {
             result = YUT_RESULTS.GAE;
         } else if (frontCount === 3) {
