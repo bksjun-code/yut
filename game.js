@@ -44,8 +44,8 @@ const BOARD_POSITIONS = [
 class YutGame {
     constructor() {
         this.players = [
-            { id: 1, name: "나 (강아지)", color: "blue", isAI: false, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, hasCircled: false })) },
-            { id: 2, name: "컴퓨터 (송아지)", color: "red", isAI: true, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, hasCircled: false })) }
+            { id: 1, name: "나 (강아지)", color: "blue", isAI: false, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, circled: false })) },
+            { id: 2, name: "컴퓨터 (송아지)", color: "red", isAI: true, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, circled: false })) }
         ];
         this.currentPlayerIndex = 0;
         this.gameState = 'IDLE'; 
@@ -95,7 +95,7 @@ class YutGame {
                 m.pos = -1;
                 m.status = 'WAITING';
                 m.cornerEntered = null;
-                m.hasCircled = false;
+                m.circled = false;
             });
             caughtMessage = "상대 말을 잡았습니다! 한 번 더 던지세요.";
         }
@@ -113,15 +113,10 @@ class YutGame {
             }
         };
 
-        // Helper to check and update hasCircled
-        const checkHasCircled = (m, oldPosition, pathArray) => {
-            if (oldPosition === 19 || oldPosition === 28 || pathArray.includes(19) || pathArray.includes(28)) {
-                m.hasCircled = true;
-            }
-            if (newPos === -1) {
-                m.hasCircled = false;
-            }
-        };
+        // A piece only reaches the start square (0) by genuinely completing the outer/shortcut lap
+        // (Back-Do never lands a piece exactly on 0 as the result of this branch). Resting there
+        // means it's on the finish line but not yet finished; any further move then finishes it.
+        const circledNow = steps !== -1 && newPos === 0;
 
         // Update position for self and grouped pieces
         othersAtSameSpot.forEach(m => {
@@ -130,15 +125,15 @@ class YutGame {
             else if (newPos === -1) m.status = 'WAITING';
             else m.status = 'ON_BOARD';
             updateCornerEntered(m, newPos, path);
-            checkHasCircled(m, oldPos, path);
+            m.circled = circledNow;
         });
-        
+
         mal.pos = newPos;
         if (newPos === 100) mal.status = 'FINISHED';
         else if (newPos === -1) mal.status = 'WAITING';
         else mal.status = 'ON_BOARD';
         updateCornerEntered(mal, newPos, path);
-        checkHasCircled(mal, oldPos, path);
+        mal.circled = circledNow;
 
         // Check for special spots
         if (newPos !== -1 && newPos !== 100) {
@@ -147,12 +142,12 @@ class YutGame {
                 mal.pos = -1;
                 mal.status = 'WAITING';
                 mal.cornerEntered = null;
-                mal.hasCircled = false;
+                mal.circled = false;
                 othersAtSameSpot.forEach(m => {
                     m.pos = -1;
                     m.status = 'WAITING';
                     m.cornerEntered = null;
-                    m.hasCircled = false;
+                    m.circled = false;
                 });
                 return { newPos: -1, path, caught: caught.length > 0, message: "퐁당! 시작점으로 되돌아갑니다." };
             } else if (this.specialSpots.pregnancy.includes(newPos)) {
@@ -162,7 +157,7 @@ class YutGame {
                     waitingMal.pos = newPos;
                     waitingMal.status = 'ON_BOARD';
                     waitingMal.cornerEntered = mal.cornerEntered;
-                    waitingMal.hasCircled = mal.hasCircled;
+                    waitingMal.circled = false;
                     return { newPos, path, caught: caught.length > 0, message: "임신! 새로운 말을 얻었습니다.", pregnancy: true };
                 }
             }
@@ -212,17 +207,30 @@ class YutGame {
         if (pos === -1) {
             path.push(0);
             pos = 0;
+        } else if (pos === 0 && mal && mal.circled) {
+            // Already resting on the start line after a completed lap: any further move passes it and finishes.
+            path.push(100);
+            return path;
         }
-        
+
         for (let i = 0; i < steps; i++) {
-            if (pos === 0 && !(currentPos === -1 && i === 0) && (mal && mal.hasCircled)) {
-                pos = 100;
-            } else {
-                let cameFrom = currentPos === -1 ? 0 : currentPos;
-                if (path.length >= 2) {
-                    cameFrom = path[path.length - 2];
+            const prevPos = pos;
+            let cameFrom = currentPos === -1 ? 0 : currentPos;
+            if (path.length >= 2) {
+                cameFrom = path[path.length - 2];
+            }
+            const nextPos = this.getSingleStep(pos, i === 0, cameFrom, mal);
+            if ((prevPos === 19 || prevPos === 28) && nextPos === 0) {
+                if (i === steps - 1) {
+                    // Exact landing on the start line: rests there, not finished until it moves again.
+                    pos = 0;
+                } else {
+                    // More steps remain in this throw, so the piece passes beyond the start line and finishes.
+                    path.push(0);
+                    pos = 100;
                 }
-                pos = this.getSingleStep(pos, i === 0, cameFrom, mal);
+            } else {
+                pos = nextPos;
             }
             path.push(pos);
             if (pos === 100) break;

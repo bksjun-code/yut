@@ -266,6 +266,7 @@ class UIController {
         this.actionPool = document.getElementById('action-pool');
         
         this.selectedMoveIndex = -1;
+        this.isMoving = false; // guards against a second move being started while one is still animating
         this.throwSound = new Audio('assets/yut_throw.mp3');
         this.synth = new YutAudioSynthesizer();
         
@@ -413,7 +414,8 @@ class UIController {
     async handleThrow() {
         if (game.gameState === 'FINISHED') return;
         if (game.gameState !== 'IDLE' && game.gameState !== 'SELECTING_MAL') return;
-        
+        if (this.isMoving) return; // a move is still animating/processing
+
         const currentPlayer = game.players[game.currentPlayerIndex];
         game.gameState = 'THROWING';
         this.throwButton.disabled = true;
@@ -557,7 +559,9 @@ class UIController {
 
     async handleAISelection() {
         if (game.gameState !== 'SELECTING_MAL') return;
-        
+        if (this.isMoving) return; // a previous move is still animating/processing
+
+        this.isMoving = true;
         try {
             const currentPlayer = game.players[game.currentPlayerIndex];
             if (!currentPlayer.isAI) return;
@@ -606,6 +610,8 @@ class UIController {
             this.switchTurn();
             game.gameState = 'IDLE';
             this.throwButton.disabled = false;
+        } finally {
+            this.isMoving = false;
         }
     }
 
@@ -642,16 +648,18 @@ class UIController {
 
     async handleMalClick(playerIdx, malId) {
         if (game.gameState === 'FINISHED' || game.gameState !== 'SELECTING_MAL' || playerIdx !== game.currentPlayerIndex) return;
+        if (this.isMoving) return; // a previous move is still animating/processing
 
         // Clear hover highlights immediately on click
         this.clearPathHighlight();
 
-        try {
-            if (this.selectedMoveIndex === -1) {
-                this.addLog("먼저 이동할 결과를 선택하세요.");
-                return;
-            }
+        if (this.selectedMoveIndex === -1) {
+            this.addLog("먼저 이동할 결과를 선택하세요.");
+            return;
+        }
 
+        this.isMoving = true;
+        try {
             const moveAmount = game.pendingMoves.splice(this.selectedMoveIndex, 1)[0];
             this.selectedMoveIndex = -1; // Reset after use
             this.renderActionPool();
@@ -661,6 +669,8 @@ class UIController {
         } catch (e) {
             console.error("Mal Click Error:", e);
             this.processNextPendingMove();
+        } finally {
+            this.isMoving = false;
         }
     }
 
