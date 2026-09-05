@@ -41,6 +41,11 @@
             <header>
                 <h1>윷놀이</h1>
                 <p>전통의 멋과 현대적 감각의 만남</p>
+                <label id="spectator-toggle-label">
+                    <input type="checkbox" id="spectator-toggle">
+                    <span class="toggle-switch"></span>
+                    <span class="toggle-text">관전 모드 (AI vs AI)</span>
+                </label>
             </header>
 
             <div id="turn-indicator" class="player-1">
@@ -53,6 +58,7 @@
                     <!-- Yut sticks will be rendered here via JS -->
                 </div>
                 <button id="throw-button">윷 던지기</button>
+                <p id="spectator-status" class="hidden">🎬 AI 대 AI 대국을 관전 중입니다...</p>
             </div>
 
             <div id="action-pool-container">

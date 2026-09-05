@@ -148,7 +148,77 @@ header h1 {
 header p {
     font-size: 0.9rem;
     color: #888;
-    margin-bottom: 30px;
+    margin-bottom: 15px;
+}
+
+#spectator-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    cursor: pointer;
+    user-select: none;
+    width: fit-content;
+}
+
+#spectator-toggle-label input {
+    display: none;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    flex-shrink: 0;
+    background: #333;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 30px;
+    transition: background 0.3s ease;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #ccc;
+    border-radius: 50%;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#spectator-toggle-label input:checked + .toggle-switch {
+    background: linear-gradient(135deg, var(--gold), #b8860b);
+    border-color: var(--gold);
+}
+
+#spectator-toggle-label input:checked + .toggle-switch::after {
+    left: 20px;
+    background: #1a1a1a;
+}
+
+.toggle-text {
+    font-size: 0.85rem;
+    color: #aaa;
+    font-family: var(--font-myeongjo);
+}
+
+#spectator-toggle-label input:checked ~ .toggle-text {
+    color: var(--gold);
+}
+
+#spectator-status {
+    margin-top: 15px;
+    font-size: 0.9rem;
+    color: var(--gold);
+    text-align: center;
+    animation: pulse-spectator 2s infinite ease-in-out;
+}
+
+@keyframes pulse-spectator {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
 }
 
 #turn-indicator {

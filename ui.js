@@ -264,7 +264,9 @@ class UIController {
         this.piecesOverlay = document.getElementById('pieces-overlay');
         this.resultBubble = document.getElementById('result-bubble');
         this.actionPool = document.getElementById('action-pool');
-        
+        this.spectatorToggle = document.getElementById('spectator-toggle');
+        this.spectatorStatus = document.getElementById('spectator-status');
+
         this.selectedMoveIndex = -1;
         this.isMoving = false; // guards against a second move being started while one is still animating
         this.throwSound = new Audio('assets/yut_throw.mp3');
@@ -287,22 +289,37 @@ class UIController {
     init() {
         this.throwButton.addEventListener('click', () => this.handleThrow());
         this.restartButton.addEventListener('click', () => location.reload());
-        
+
+        this.spectatorToggle.checked = game.spectatorMode;
+        this.spectatorToggle.addEventListener('change', () => {
+            localStorage.setItem('yut_spectator_mode', this.spectatorToggle.checked);
+            location.reload();
+        });
+
         // Load last winner to decide who starts
         const lastWinner = localStorage.getItem('yut_last_winner');
         if (lastWinner !== null) {
             game.currentPlayerIndex = parseInt(lastWinner);
         }
 
+        // Keep sidebar labels in sync with player names (they change in spectator mode)
+        document.querySelector('.p1 h4').textContent = game.players[0].name;
+        document.querySelector('.p2 h4').textContent = game.players[1].name;
+
+        if (game.spectatorMode) {
+            this.throwButton.classList.add('hidden');
+            this.spectatorStatus.classList.remove('hidden');
+        }
+
         const p = game.players[game.currentPlayerIndex];
         this.turnIndicator.className = `player-${p.id}`;
         this.playerName.textContent = p.name;
 
-        this.renderYutSticks([1, 1, 1, 1]); 
+        this.renderYutSticks([1, 1, 1, 1]);
         this.renderBoard();
         this.renderPieces();
         this.renderInventory();
-        
+
         if (p.isAI) {
             this.throwButton.disabled = true;
             this.addLog(`게임을 시작합니다. ${p.name}의 차례입니다.`);
@@ -884,8 +901,8 @@ class UIController {
     checkWinCondition() {
         const player = game.players[game.currentPlayerIndex];
         if (player.mals.every(m => m.pos === 100)) {
-            const winnerName = player.isAI ? "컴퓨터" : "나 (강아지)";
-            
+            const winnerName = player.name;
+
             // Save winner for next game
             localStorage.setItem('yut_last_winner', game.currentPlayerIndex);
             

@@ -43,9 +43,10 @@ const BOARD_POSITIONS = [
 
 class YutGame {
     constructor() {
+        this.spectatorMode = localStorage.getItem('yut_spectator_mode') === 'true';
         this.players = [
-            { id: 1, name: "나 (강아지)", color: "blue", isAI: false, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, circled: false })) },
-            { id: 2, name: "컴퓨터 (송아지)", color: "red", isAI: true, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, circled: false })) }
+            { id: 1, name: this.spectatorMode ? "AI-1 (강아지)" : "나 (강아지)", color: "blue", isAI: this.spectatorMode, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, circled: false })) },
+            { id: 2, name: this.spectatorMode ? "AI-2 (송아지)" : "컴퓨터 (송아지)", color: "red", isAI: true, mals: Array(4).fill(null).map((_, i) => ({ id: i, pos: -1, status: 'WAITING', cornerEntered: null, circled: false })) }
         ];
         this.currentPlayerIndex = 0;
         this.gameState = 'IDLE'; 
